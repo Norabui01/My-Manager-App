@@ -81,7 +81,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final notificationService = atClientManager?.notificationService;
       if (notificationService != null) {
         _notificationSubscription = notificationService
-            .subscribe(regex: 'message.*')
+            .subscribe(regex: 'message\\..*')
             .listen(_handleNotification);
       }
     } catch (e) {
@@ -90,10 +90,19 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _handleNotification(AtNotification notification) {
-    if (notification.key.contains('message.')) {
+  _logger.info('Received notification: ${notification.key}');
+  
+  if (notification.key.contains('message.')) {
+    // Handle both regular messages and self-notifications
+    if (notification.key.contains('.self')) {
+      // This is a self-notification for cross-device sync
+      _processSelfMessage(notification);
+    } else {
+      // This is a message from another user
       _processIncomingMessage(notification);
     }
   }
+}
 
   Future<void> _processIncomingMessage(AtNotification notification) async {
     try {
@@ -139,6 +148,119 @@ class _ChatScreenState extends State<ChatScreen> {
       _logger.severe('Error processing incoming message: $e');
     }
   }
+
+  Future<void> _processSelfMessage(AtNotification notification) async {
+  // Handle messages sent from your other devices
+  try {
+    final messageData = jsonDecode(notification.value ?? '{}');
+    
+    // Extract recipient from the message data
+    String? recipientAtSign = messageData['recipientAtSign'] ?? 
+                             messageData['originalRecipient'] ?? 
+                             notification.to;
+    
+    // Verify this is actually a self-notification
+    bool isSelfNotification = messageData['isSelfNotification'] == true ||
+                             notification.key.contains('.self');
+    
+    if (!isSelfNotification) {
+      _logger.warning('Received non-self message in self processor');
+      return;
+    }
+    
+    if (recipientAtSign == null || recipientAtSign.isEmpty) {
+      _logger.warning('Could not determine recipient for self message');
+      return;
+    }
+    
+    // Find or create conversation with the recipient
+    int conversationIndex = conversations.indexWhere(
+      (conv) => conv.otherAtSign == recipientAtSign,
+    );
+    
+    ChatConversation targetConversation;
+    
+    if (conversationIndex == -1) {
+      // Create new conversation if it doesn't exist
+      targetConversation = ChatConversation(
+        otherAtSign: recipientAtSign,
+        lastMessage: messageData['text'] ?? '',
+        lastMessageTime: DateTime.parse(
+          messageData['timestamp'] ?? DateTime.now().toIso8601String()
+        ),
+        unreadCount: 0, // Don't mark your own messages as unread
+        messages: [],
+      );
+      conversations.insert(0, targetConversation);
+      conversationIndex = 0;
+    } else {
+      // Update existing conversation
+      targetConversation = conversations[conversationIndex];
+      targetConversation.lastMessage = messageData['text'] ?? '';
+      targetConversation.lastMessageTime = DateTime.parse(
+        messageData['timestamp'] ?? DateTime.now().toIso8601String()
+      );
+      
+      // Move conversation to top of list
+      conversations.removeAt(conversationIndex);
+      conversations.insert(0, targetConversation);
+      conversationIndex = 0;
+    }
+    
+    // Create the message object
+    final message = ChatMessage(
+      text: messageData['text'] ?? '',
+      isMe: true, // This is your message from another device
+      timestamp: DateTime.parse(
+        messageData['timestamp'] ?? DateTime.now().toIso8601String()
+      ),
+      senderAtSign: currentAtSign!, // You sent this message
+    );
+    
+    // Check if this message already exists to avoid duplicates
+    bool messageExists = targetConversation.messages.any(
+      (existingMessage) => 
+        existingMessage.text == message.text && 
+        existingMessage.timestamp.difference(message.timestamp).abs().inSeconds < 5 &&
+        existingMessage.isMe == message.isMe
+    );
+    
+    if (!messageExists) {
+      // Add message to conversation in chronological order
+      targetConversation.messages.add(message);
+      
+      // Sort messages by timestamp to maintain order
+      targetConversation.messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      
+      // Save the updated conversation
+      await _saveConversation(targetConversation);
+      
+      _logger.info('Added self message to conversation with $recipientAtSign');
+    } else {
+      _logger.info('Self message already exists, skipping duplicate');
+    }
+    
+    // Update UI with your own message from another device
+    setState(() {
+      // The conversations list and messages are already updated above
+      // This setState will trigger a rebuild to show the new message
+    });
+    
+  } catch (e) {
+    _logger.severe('Error processing self message: $e');
+    
+    // Show user-friendly error if needed
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to sync message from another device'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+}
 
   Future<void> _loadConversations() async {
     try {
@@ -736,9 +858,24 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       };
 
       await atClient.put(messageKey, jsonEncode(messageData));
+
+          // Also notify yourself for cross-device sync
+      final selfNotificationKey = AtKey()
+        ..key = 'message.${DateTime.now().millisecondsSinceEpoch}.self'
+        ..namespace = 'chatapp'
+        ..sharedWith = widget.currentAtSign  // Send to yourself
+        ..sharedBy = widget.currentAtSign;
+    
+      await atClient.put(selfNotificationKey, jsonEncode(messageData));
       
       // Notify parent to update conversation list
       widget.onMessageSent(message);
+
+      try {
+        atClientManager?.atClient.syncService;
+      } catch (e) {
+        _logger.warning('Sync failed: $e');
+      }
 
       _logger.info('Message sent successfully to ${widget.conversation.otherAtSign}');
     } catch (e) {
