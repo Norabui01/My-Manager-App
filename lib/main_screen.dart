@@ -1,6 +1,5 @@
-import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/material.dart';
-import 'customers_screen.dart'; // Update with your actual file path
+// Update with your actual file path
 import 'people_screen.dart';
 import 'search_screen.dart';
 import 'chat_screen.dart';
