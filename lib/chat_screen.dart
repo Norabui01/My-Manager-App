@@ -34,15 +34,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initializeAtClient() async {
     try {
-      // Get the current AtSign if already onboarded
       atClientManager = AtClientManager.getInstance();
       currentAtSign = atClientManager?.atClient.getCurrentAtSign();
-      
+
       if (currentAtSign != null) {
         await _setupNotificationListener();
         await _loadConversations();
       } else {
-        // Navigate to onboarding if not authenticated
         _navigateToOnboarding();
       }
     } catch (e) {
@@ -59,7 +57,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ..hiveStoragePath = '/storage/hive'
         ..commitLogPath = '/storage/commitLog'
         ..isLocalStoreRequired = true,
-      appAPIKey: 'YOUR_API_KEY', // Replace with your actual API key
+      appAPIKey: 'YOUR_API_KEY',
       rootEnvironment: RootEnvironment.Production,
     );
 
@@ -81,7 +79,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final notificationService = atClientManager?.notificationService;
       if (notificationService != null) {
         _notificationSubscription = notificationService
-            .subscribe(regex: 'message\\..*')
+            .subscribe(regex: '.*')
             .listen(_handleNotification);
       }
     } catch (e) {
@@ -90,32 +88,29 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _handleNotification(AtNotification notification) {
-  _logger.info('Received notification: ${notification.key}');
-  
-  if (notification.key.contains('message.')) {
-    // Handle both regular messages and self-notifications
-    if (notification.key.contains('.self')) {
-      // This is a self-notification for cross-device sync
-      _processSelfMessage(notification);
-    } else {
-      // This is a message from another user
+    _logger.info('Received notification: ${notification.key}');
+
+    if (notification.key.contains('message.')) {
       _processIncomingMessage(notification);
     }
   }
-}
 
   Future<void> _processIncomingMessage(AtNotification notification) async {
     try {
       final messageData = jsonDecode(notification.value ?? '{}');
       final senderAtSign = notification.from;
-      
+
+      // Skip if this is our own message (already added locally)
+      if (senderAtSign == currentAtSign) {
+        return;
+      }
+
       // Find or create conversation
       int conversationIndex = conversations.indexWhere(
-        (conv) => conv.otherAtSign == senderAtSign,
+            (conv) => conv.otherAtSign == senderAtSign,
       );
-      
+
       if (conversationIndex == -1) {
-        // Create new conversation
         conversations.insert(0, ChatConversation(
           otherAtSign: senderAtSign,
           lastMessage: messageData['text'] ?? '',
@@ -125,165 +120,58 @@ class _ChatScreenState extends State<ChatScreen> {
         ));
         conversationIndex = 0;
       } else {
-        // Update existing conversation
         conversations[conversationIndex].lastMessage = messageData['text'] ?? '';
         conversations[conversationIndex].lastMessageTime = DateTime.now();
         conversations[conversationIndex].unreadCount++;
-        
-        // Move to top
+
         final conversation = conversations.removeAt(conversationIndex);
         conversations.insert(0, conversation);
       }
-      
-      // Add message to conversation
+
       conversations[0].messages.add(ChatMessage(
         text: messageData['text'] ?? '',
         isMe: false,
         timestamp: DateTime.now(),
         senderAtSign: senderAtSign,
       ));
-      
+
+      await _saveConversation(conversations[0]);
       setState(() {});
     } catch (e) {
       _logger.severe('Error processing incoming message: $e');
     }
   }
 
-  Future<void> _processSelfMessage(AtNotification notification) async {
-  // Handle messages sent from your other devices
-  try {
-    final messageData = jsonDecode(notification.value ?? '{}');
-    
-    // Extract recipient from the message data
-    String? recipientAtSign = messageData['recipientAtSign'] ?? 
-                             messageData['originalRecipient'] ?? 
-                             notification.to;
-    
-    // Verify this is actually a self-notification
-    bool isSelfNotification = messageData['isSelfNotification'] == true ||
-                             notification.key.contains('.self');
-    
-    if (!isSelfNotification) {
-      _logger.warning('Received non-self message in self processor');
-      return;
-    }
-    
-    if (recipientAtSign == null || recipientAtSign.isEmpty) {
-      _logger.warning('Could not determine recipient for self message');
-      return;
-    }
-    
-    // Find or create conversation with the recipient
-    int conversationIndex = conversations.indexWhere(
-      (conv) => conv.otherAtSign == recipientAtSign,
-    );
-    
-    ChatConversation targetConversation;
-    
-    if (conversationIndex == -1) {
-      // Create new conversation if it doesn't exist
-      targetConversation = ChatConversation(
-        otherAtSign: recipientAtSign,
-        lastMessage: messageData['text'] ?? '',
-        lastMessageTime: DateTime.parse(
-          messageData['timestamp'] ?? DateTime.now().toIso8601String()
-        ),
-        unreadCount: 0, // Don't mark your own messages as unread
-        messages: [],
-      );
-      conversations.insert(0, targetConversation);
-      conversationIndex = 0;
-    } else {
-      // Update existing conversation
-      targetConversation = conversations[conversationIndex];
-      targetConversation.lastMessage = messageData['text'] ?? '';
-      targetConversation.lastMessageTime = DateTime.parse(
-        messageData['timestamp'] ?? DateTime.now().toIso8601String()
-      );
-      
-      // Move conversation to top of list
-      conversations.removeAt(conversationIndex);
-      conversations.insert(0, targetConversation);
-      conversationIndex = 0;
-    }
-    
-    // Create the message object
-    final message = ChatMessage(
-      text: messageData['text'] ?? '',
-      isMe: true, // This is your message from another device
-      timestamp: DateTime.parse(
-        messageData['timestamp'] ?? DateTime.now().toIso8601String()
-      ),
-      senderAtSign: currentAtSign!, // You sent this message
-    );
-    
-    // Check if this message already exists to avoid duplicates
-    bool messageExists = targetConversation.messages.any(
-      (existingMessage) => 
-        existingMessage.text == message.text && 
-        existingMessage.timestamp.difference(message.timestamp).abs().inSeconds < 5 &&
-        existingMessage.isMe == message.isMe
-    );
-    
-    if (!messageExists) {
-      // Add message to conversation in chronological order
-      targetConversation.messages.add(message);
-      
-      // Sort messages by timestamp to maintain order
-      targetConversation.messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      
-      // Save the updated conversation
-      await _saveConversation(targetConversation);
-      
-      _logger.info('Added self message to conversation with $recipientAtSign');
-    } else {
-      _logger.info('Self message already exists, skipping duplicate');
-    }
-    
-    // Update UI with your own message from another device
-    setState(() {
-      // The conversations list and messages are already updated above
-      // This setState will trigger a rebuild to show the new message
-    });
-    
-  } catch (e) {
-    _logger.severe('Error processing self message: $e');
-    
-    // Show user-friendly error if needed
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to sync message from another device'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-}
-
   Future<void> _loadConversations() async {
     try {
       final atClient = atClientManager?.atClient;
       if (atClient == null) return;
-      
-      // Load conversation keys from atServer
-      final keys = await atClient.getKeys(regex: 'conversation.*');
-      
+
+      conversations.clear();
+
+      // Load conversation keys
+      final keys = await atClient.getKeys(regex: 'conversation\\..*');
+
       for (String key in keys) {
         try {
-          final atValue = await atClient.get(AtKey.fromString(key));
+          final atKey = AtKey.fromString(key);
+          atKey.sharedBy = currentAtSign;
+
+          final atValue = await atClient.get(atKey);
           if (atValue.value != null) {
             final conversationData = jsonDecode(atValue.value!);
             final conversation = ChatConversation.fromJson(conversationData);
+
+            // Also load messages for this conversation
+            await _loadMessagesForConversation(conversation);
+
             conversations.add(conversation);
           }
         } catch (e) {
           _logger.warning('Error loading conversation $key: $e');
         }
       }
-      
-      // Sort conversations by last message time
+
       conversations.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
       setState(() {});
     } catch (e) {
@@ -291,16 +179,75 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _loadMessagesForConversation(ChatConversation conversation) async {
+    try {
+      final atClient = atClientManager?.atClient;
+      if (atClient == null) return;
+
+      conversation.messages.clear();
+
+      // Load messages shared with the other person
+      final sharedKeys = await atClient.getKeys(
+        regex: 'message\\..*',
+        sharedWith: conversation.otherAtSign,
+      );
+
+      // Load messages shared by the other person
+      final receivedKeys = await atClient.getKeys(
+        regex: 'message\\..*',
+        sharedBy: conversation.otherAtSign,
+      );
+
+      // Process all messages
+      final allKeys = {...sharedKeys, ...receivedKeys};
+
+      for (String key in allKeys) {
+        try {
+          final atKey = AtKey.fromString(key);
+
+          // Set proper metadata
+          if (sharedKeys.contains(key)) {
+            atKey.sharedBy = currentAtSign;
+            atKey.sharedWith = conversation.otherAtSign;
+          } else {
+            atKey.sharedBy = conversation.otherAtSign;
+            atKey.sharedWith = currentAtSign;
+          }
+
+          final atValue = await atClient.get(atKey);
+          if (atValue.value != null) {
+            final messageData = jsonDecode(atValue.value!);
+
+            conversation.messages.add(ChatMessage(
+              text: messageData['text'] ?? '',
+              isMe: atKey.sharedBy == currentAtSign,
+              timestamp: DateTime.parse(messageData['timestamp'] ?? DateTime.now().toIso8601String()),
+              senderAtSign: atKey.sharedBy!,
+            ));
+          }
+        } catch (e) {
+          _logger.warning('Error loading message $key: $e');
+        }
+      }
+
+      // Sort messages by timestamp
+      conversation.messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    } catch (e) {
+      _logger.severe('Error loading messages for conversation: $e');
+    }
+  }
+
   Future<void> _saveConversation(ChatConversation conversation) async {
     try {
       final atClient = atClientManager?.atClient;
       if (atClient == null) return;
-      
+
       final key = AtKey()
         ..key = 'conversation.${conversation.otherAtSign.replaceAll('@', '')}'
         ..namespace = 'chatapp'
         ..sharedBy = currentAtSign;
-      
+
       await atClient.put(key, jsonEncode(conversation.toJson()));
     } catch (e) {
       _logger.severe('Error saving conversation: $e');
@@ -309,7 +256,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _onItemTapped(int index) {
     if (index == _selectedIndex) return;
-    
+
     Widget screen;
     switch (index) {
       case 0:
@@ -319,14 +266,14 @@ class _ChatScreenState extends State<ChatScreen> {
         screen = const PeopleScreen();
         break;
       case 2:
-        return; // Already on chat screen
+        return;
       case 3:
         screen = const SearchScreen();
         break;
       default:
         return;
     }
-    
+
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => screen),
@@ -395,14 +342,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _openChatWithAtSign(String atSign) {
-    // Find existing conversation or create new one
     ChatConversation? conversation = conversations
         .cast<ChatConversation?>()
         .firstWhere(
           (conv) => conv?.otherAtSign == atSign,
-          orElse: () => null,
-        );
-    
+      orElse: () => null,
+    );
+
     if (conversation == null) {
       conversation = ChatConversation(
         otherAtSign: atSign,
@@ -413,7 +359,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       conversations.insert(0, conversation);
     }
-    
+
     _openChat(conversation);
   }
 
@@ -461,10 +407,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildChatItem(ChatConversation conversation) {
     final displayName = conversation.otherAtSign.replaceAll('@', '');
-    final avatar = displayName.length >= 2 
+    final avatar = displayName.length >= 2
         ? displayName.substring(0, 2).toUpperCase()
         : displayName.toUpperCase();
-    
+
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: CircleAvatar(
@@ -486,8 +432,8 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
       subtitle: Text(
-        conversation.lastMessage.isEmpty 
-            ? 'No messages yet' 
+        conversation.lastMessage.isEmpty
+            ? 'No messages yet'
             : conversation.lastMessage,
         style: TextStyle(
           color: Colors.grey[600],
@@ -549,7 +495,7 @@ class _ChatScreenState extends State<ChatScreen> {
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final difference = now.difference(time);
-    
+
     if (difference.inMinutes < 1) {
       return 'now';
     } else if (difference.inMinutes < 60) {
@@ -565,12 +511,11 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _openChat(ChatConversation conversation) {
-    // Mark as read
+  void _openChat(ChatConversation conversation) async {
     conversation.unreadCount = 0;
     setState(() {});
-    
-    Navigator.push(
+
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ChatDetailScreen(
@@ -586,6 +531,12 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
     );
+
+    // Reload messages when returning from chat detail
+    if (result == true) {
+      await _loadMessagesForConversation(conversation);
+      setState(() {});
+    }
   }
 
   @override
@@ -645,49 +596,49 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: conversations.isEmpty
           ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 64,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'No conversations yet',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Start a new chat to begin messaging',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: conversations.length,
-              itemBuilder: (context, index) {
-                return Card(
-                  elevation: 0,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: Colors.grey[200]!),
-                  ),
-                  child: _buildChatItem(conversations[index]),
-                );
-              },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.chat_bubble_outline,
+              size: 64,
+              color: Colors.grey,
             ),
+            SizedBox(height: 16),
+            Text(
+              'No conversations yet',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Start a new chat to begin messaging',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      )
+          : ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: conversations.length,
+        itemBuilder: (context, index) {
+          return Card(
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: Colors.grey[200]!),
+            ),
+            child: _buildChatItem(conversations[index]),
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _startNewChat,
         backgroundColor: Colors.blue,
@@ -797,12 +748,48 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final ScrollController _scrollController = ScrollController();
   AtClientManager? atClientManager;
   final AtSignLogger _logger = AtSignLogger('ChatDetailScreen');
+  StreamSubscription<AtNotification>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
     atClientManager = AtClientManager.getInstance();
+    _setupNotificationListener();
     _scrollToBottom();
+  }
+
+  Future<void> _setupNotificationListener() async {
+    try {
+      final notificationService = atClientManager?.notificationService;
+      if (notificationService != null) {
+        _notificationSubscription = notificationService
+            .subscribe(regex: 'message\\..*')
+            .listen(_handleIncomingMessage);
+      }
+    } catch (e) {
+      _logger.severe('Error setting up notification listener in chat detail: $e');
+    }
+  }
+
+  void _handleIncomingMessage(AtNotification notification) {
+    if (notification.from == widget.conversation.otherAtSign) {
+      try {
+        final messageData = jsonDecode(notification.value ?? '{}');
+
+        setState(() {
+          widget.conversation.messages.add(ChatMessage(
+            text: messageData['text'] ?? '',
+            isMe: false,
+            timestamp: DateTime.now(),
+            senderAtSign: notification.from,
+          ));
+        });
+
+        _scrollToBottom();
+      } catch (e) {
+        _logger.severe('Error handling incoming message in chat detail: $e');
+      }
+    }
   }
 
   void _scrollToBottom() {
@@ -830,7 +817,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         return;
       }
 
-      // Create message object
       final message = ChatMessage(
         text: messageText,
         isMe: true,
@@ -838,15 +824,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         senderAtSign: widget.currentAtSign,
       );
 
-      // Add to local conversation immediately for immediate UI feedback
       setState(() {
         widget.conversation.messages.add(message);
       });
       _scrollToBottom();
 
-      // Send to atServer
+      // Create unique message key with timestamp
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
       final messageKey = AtKey()
-        ..key = 'message.${DateTime.now().millisecondsSinceEpoch}'
+        ..key = 'message.$timestamp'
         ..namespace = 'chatapp'
         ..sharedWith = widget.conversation.otherAtSign
         ..sharedBy = widget.currentAtSign;
@@ -855,34 +841,28 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         'text': messageText,
         'timestamp': message.timestamp.toIso8601String(),
         'type': 'text',
+        'senderAtSign': widget.currentAtSign,
       };
 
       await atClient.put(messageKey, jsonEncode(messageData));
 
-          // Also notify yourself for cross-device sync
-      final selfNotificationKey = AtKey()
-        ..key = 'message.${DateTime.now().millisecondsSinceEpoch}.self'
-        ..namespace = 'chatapp'
-        ..sharedWith = widget.currentAtSign  // Send to yourself
-        ..sharedBy = widget.currentAtSign;
-    
-      await atClient.put(selfNotificationKey, jsonEncode(messageData));
-      
-      // Notify parent to update conversation list
+      // Notify the recipient
+      await atClient.notify(
+        messageKey,
+        jsonEncode(messageData),
+        OperationEnum.update,
+      );
+
       widget.onMessageSent(message);
 
-      try {
-        atClientManager?.atClient.syncService;
-      } catch (e) {
-        _logger.warning('Sync failed: $e');
-      }
+      // Trigger sync
+      atClient.syncService.sync();
 
       _logger.info('Message sent successfully to ${widget.conversation.otherAtSign}');
     } catch (e) {
       _logger.severe('Error sending message: $e');
       _showError('Failed to send message');
-      
-      // Remove the message from local list if sending failed
+
       setState(() {
         widget.conversation.messages.removeLast();
       });
@@ -901,73 +881,79 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final displayName = widget.conversation.otherAtSign.replaceAll('@', '');
-    final avatar = displayName.length >= 2 
+    final avatar = displayName.length >= 2
         ? displayName.substring(0, 2).toUpperCase()
         : displayName.toUpperCase();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: _getColorForAtSign(widget.conversation.otherAtSign),
-              radius: 20,
-              child: Text(
-                avatar,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+    return WillPopScope(
+      onWillPop: () async {
+        Navigator.pop(context, true); // Return true to trigger reload
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: _getColorForAtSign(widget.conversation.otherAtSign),
+                radius: 20,
+                child: Text(
+                  avatar,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: const TextStyle(fontSize: 16),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      widget.conversation.otherAtSign,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 1,
+        ),
+        body: Column(
+          children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    displayName,
-                    style: const TextStyle(fontSize: 16),
-                    overflow: TextOverflow.ellipsis,
+              child: widget.conversation.messages.isEmpty
+                  ? const Center(
+                child: Text(
+                  'No messages yet. Start the conversation!',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 16,
                   ),
-                  Text(
-                    widget.conversation.otherAtSign,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                ),
+              )
+                  : ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                itemCount: widget.conversation.messages.length,
+                itemBuilder: (context, index) {
+                  return _buildMessage(widget.conversation.messages[index]);
+                },
               ),
             ),
+            _buildMessageInput(),
           ],
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 1,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: widget.conversation.messages.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No messages yet. Start the conversation!',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 16,
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: widget.conversation.messages.length,
-                    itemBuilder: (context, index) {
-                      return _buildMessage(widget.conversation.messages[index]);
-                    },
-                  ),
-          ),
-          _buildMessageInput(),
-        ],
       ),
     );
   }
@@ -991,8 +977,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        mainAxisAlignment: message.isMe 
-            ? MainAxisAlignment.end 
+        mainAxisAlignment: message.isMe
+            ? MainAxisAlignment.end
             : MainAxisAlignment.start,
         children: [
           Container(
@@ -1017,8 +1003,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 Text(
                   _formatMessageTime(message.timestamp),
                   style: TextStyle(
-                    color: message.isMe 
-                        ? Colors.white.withOpacity(0.7) 
+                    color: message.isMe
+                        ? Colors.white.withOpacity(0.7)
                         : Colors.grey[600],
                     fontSize: 12,
                   ),
@@ -1034,7 +1020,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   String _formatMessageTime(DateTime time) {
     final now = DateTime.now();
     final difference = now.difference(time);
-    
+
     if (difference.inMinutes < 1) {
       return 'now';
     } else if (difference.inHours < 24) {
@@ -1097,6 +1083,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _notificationSubscription?.cancel();
     super.dispose();
   }
 }
@@ -1232,42 +1219,42 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
       ),
       body: searchResults.isEmpty
           ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.search,
-                    size: 64,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Search your chats',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Enter a search term to find messages',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : ListView.builder(
-              itemCount: searchResults.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(searchResults[index]),
-                );
-              },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search,
+              size: 64,
+              color: Colors.grey,
             ),
+            SizedBox(height: 16),
+            Text(
+              'Search your chats',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Enter a search term to find messages',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      )
+          : ListView.builder(
+        itemCount: searchResults.length,
+        itemBuilder: (context, index) {
+          return ListTile(
+            title: Text(searchResults[index]),
+          );
+        },
+      ),
     );
   }
 

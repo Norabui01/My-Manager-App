@@ -1,16 +1,17 @@
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:path_provider/path_provider.dart';
 
 class AtPlatformConfig {
   static const String namespace = 'chatapp';
   static const String rootDomain = 'root.atsign.org';
-  
+
   // Replace with your actual API key from atsign.dev
-  static const String apiKey = 'YOUR_API_KEY_HERE';
-  
+  static String apiKey = dotenv.env['API_KEY'] ?? 'YOUR_API_KEY';
+
   static Future<AtClientPreference> getClientPreference() async {
     final dir = await getApplicationSupportDirectory();
-    
+
     return AtClientPreference()
       ..rootDomain = rootDomain
       ..namespace = namespace
@@ -18,9 +19,11 @@ class AtPlatformConfig {
       ..commitLogPath = '${dir.path}/storage/commitLog'
       ..isLocalStoreRequired = true
       ..syncStrategy = SyncStrategy.immediate
-      ..syncIntervalMins = 1;
+      ..syncIntervalMins = 1
+      ..fetchOfflineNotifications = true
+      ..monitorHeartbeatInterval = Duration(seconds: 60);
   }
-  
+
   static AtOnboardingConfig getOnboardingConfig() {
     return AtOnboardingConfig(
       atClientPreference: AtClientPreference()
@@ -38,7 +41,7 @@ class MessageKeys {
   static const String messagePrefix = 'message';
   static const String conversationPrefix = 'conversation';
   static const String metadataPrefix = 'metadata';
-  
+
   static String messageKey(int timestamp) => '$messagePrefix.$timestamp';
   static String conversationKey(String atSign) => '$conversationPrefix.${atSign.replaceAll('@', '')}';
   static String metadataKey(String type) => '$metadataPrefix.$type';
@@ -47,28 +50,28 @@ class MessageKeys {
 class AtPlatformHelper {
   static bool isValidAtSign(String atSign) {
     if (atSign.isEmpty) return false;
-    
+
     // Remove @ if present for validation
     String cleanAtSign = atSign.startsWith('@') ? atSign.substring(1) : atSign;
-    
+
     // Basic validation rules
     if (cleanAtSign.isEmpty) return false;
-    if (cleanAtSign.length < 1 || cleanAtSign.length > 55) return false;
-    
+    if (cleanAtSign.length > 55) return false;
+
     // Should not contain invalid characters
     RegExp validPattern = RegExp(r'^[a-zA-Z0-9_.-]+$');
     return validPattern.hasMatch(cleanAtSign);
   }
-  
+
   static String formatAtSign(String atSign) {
     if (atSign.isEmpty) return atSign;
     return atSign.startsWith('@') ? atSign : '@$atSign';
   }
-  
+
   static String getDisplayName(String atSign) {
     return atSign.replaceAll('@', '');
   }
-  
+
   static String getInitials(String atSign) {
     String displayName = getDisplayName(atSign);
     if (displayName.length >= 2) {
@@ -78,14 +81,79 @@ class AtPlatformHelper {
   }
 }
 
+// Message sync helper
+class MessageSyncHelper {
+  static Future<void> syncMessages(AtClient atClient, String currentAtSign) async {
+    try {
+      // Force sync with the server
+      atClient.syncService.sync();
+
+      // Get the monitor connection to check for any pending notifications
+      final notificationService = atClient.notificationService;
+
+      // The notification service will automatically fetch notifications
+      // when the monitor connection is active
+
+    } catch (e) {
+      print('Error syncing messages: $e');
+    }
+  }
+
+  static Future<List<AtKey>> getMessageKeys(
+      AtClient atClient,
+      String otherAtSign,
+      String currentAtSign,
+      ) async {
+    final List<AtKey> messageKeys = [];
+
+    try {
+      // Get all message keys
+      final regex = 'message\\..*';
+
+      // Get messages we sent
+      final sentKeys = await atClient.getKeys(
+        regex: regex,
+        sharedWith: otherAtSign,
+      );
+
+      // Get messages we received
+      final receivedKeys = await atClient.getKeys(
+        regex: regex,
+        sharedBy: otherAtSign,
+      );
+
+      // Process sent keys
+      for (String key in sentKeys) {
+        final atKey = AtKey.fromString(key);
+        atKey.sharedBy = currentAtSign;
+        atKey.sharedWith = otherAtSign;
+        messageKeys.add(atKey);
+      }
+
+      // Process received keys
+      for (String key in receivedKeys) {
+        final atKey = AtKey.fromString(key);
+        atKey.sharedBy = otherAtSign;
+        atKey.sharedWith = currentAtSign;
+        messageKeys.add(atKey);
+      }
+
+    } catch (e) {
+      print('Error getting message keys: $e');
+    }
+
+    return messageKeys;
+  }
+}
+
 // Error handling for atPlatform operations
 class AtPlatformException implements Exception {
   final String message;
   final String? code;
   final dynamic originalException;
-  
+
   AtPlatformException(this.message, {this.code, this.originalException});
-  
+
   @override
   String toString() {
     return 'AtPlatformException: $message${code != null ? ' (Code: $code)' : ''}';
@@ -109,7 +177,7 @@ class EnhancedChatMessage {
   String senderAtSign;
   MessageStatus status;
   String? error;
-  
+
   EnhancedChatMessage({
     required this.id,
     required this.text,
@@ -119,7 +187,7 @@ class EnhancedChatMessage {
     this.status = MessageStatus.sent,
     this.error,
   });
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -131,7 +199,7 @@ class EnhancedChatMessage {
       'error': error,
     };
   }
-  
+
   factory EnhancedChatMessage.fromJson(Map<String, dynamic> json) {
     return EnhancedChatMessage(
       id: json['id'] ?? '',
@@ -140,7 +208,7 @@ class EnhancedChatMessage {
       timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
       senderAtSign: json['senderAtSign'] ?? '',
       status: MessageStatus.values.firstWhere(
-        (e) => e.toString() == json['status'],
+            (e) => e.toString() == json['status'],
         orElse: () => MessageStatus.sent,
       ),
       error: json['error'],
