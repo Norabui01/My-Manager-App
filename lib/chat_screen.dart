@@ -79,8 +79,15 @@ class _ChatScreenState extends State<ChatScreen> {
       final notificationService = atClientManager?.notificationService;
       if (notificationService != null) {
         _notificationSubscription = notificationService
-            .subscribe(regex: '.*')
-            .listen(_handleNotification);
+            .subscribe(regex: '.*', shouldDecrypt: true)
+            .listen((notification) {
+          _logger.info('Notification received: ${notification.key}');
+          _handleNotification(notification);
+        }, onError: (e) {
+          _logger.severe('Notification error: $e');
+        });
+
+        _logger.info('Notification listener setup complete');
       }
     } catch (e) {
       _logger.severe('Error setting up notification listener: $e');
@@ -88,22 +95,25 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _handleNotification(AtNotification notification) {
-    _logger.info('Received notification: ${notification.key}');
+    _logger.info('Handling notification: ${notification.key} from ${notification.from}');
 
-    if (notification.key.contains('message.')) {
+    // Handle both stored messages and notifications
+    if (notification.key.contains('message.') || notification.key.contains('notify.message.')) {
       _processIncomingMessage(notification);
     }
   }
 
   Future<void> _processIncomingMessage(AtNotification notification) async {
     try {
+      // Skip if this is our own message
+      if (notification.from == currentAtSign) {
+        return;
+      }
+
       final messageData = jsonDecode(notification.value ?? '{}');
       final senderAtSign = notification.from;
 
-      // Skip if this is our own message (already added locally)
-      if (senderAtSign == currentAtSign) {
-        return;
-      }
+      _logger.info('Processing message from $senderAtSign: ${messageData['text']}');
 
       // Find or create conversation
       int conversationIndex = conversations.indexWhere(
@@ -114,28 +124,42 @@ class _ChatScreenState extends State<ChatScreen> {
         conversations.insert(0, ChatConversation(
           otherAtSign: senderAtSign,
           lastMessage: messageData['text'] ?? '',
-          lastMessageTime: DateTime.now(),
+          lastMessageTime: DateTime.parse(messageData['timestamp'] ?? DateTime.now().toIso8601String()),
           unreadCount: 1,
           messages: [],
         ));
         conversationIndex = 0;
       } else {
         conversations[conversationIndex].lastMessage = messageData['text'] ?? '';
-        conversations[conversationIndex].lastMessageTime = DateTime.now();
+        conversations[conversationIndex].lastMessageTime = DateTime.parse(
+            messageData['timestamp'] ?? DateTime.now().toIso8601String()
+        );
         conversations[conversationIndex].unreadCount++;
 
         final conversation = conversations.removeAt(conversationIndex);
         conversations.insert(0, conversation);
       }
 
-      conversations[0].messages.add(ChatMessage(
+      // Add message to conversation
+      final newMessage = ChatMessage(
         text: messageData['text'] ?? '',
         isMe: false,
-        timestamp: DateTime.now(),
+        timestamp: DateTime.parse(messageData['timestamp'] ?? DateTime.now().toIso8601String()),
         senderAtSign: senderAtSign,
-      ));
+      );
 
-      await _saveConversation(conversations[0]);
+      // Check for duplicates before adding
+      final isDuplicate = conversations[0].messages.any((msg) =>
+      msg.text == newMessage.text &&
+          msg.senderAtSign == newMessage.senderAtSign &&
+          msg.timestamp.difference(newMessage.timestamp).abs().inSeconds < 5
+      );
+
+      if (!isDuplicate) {
+        conversations[0].messages.add(newMessage);
+        await _saveConversation(conversations[0]);
+      }
+
       setState(() {});
     } catch (e) {
       _logger.severe('Error processing incoming message: $e');
@@ -763,8 +787,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       final notificationService = atClientManager?.notificationService;
       if (notificationService != null) {
         _notificationSubscription = notificationService
-            .subscribe(regex: 'message\\..*')
-            .listen(_handleIncomingMessage);
+            .subscribe(regex: '.*', shouldDecrypt: true)
+            .listen((notification) {
+          _logger.info('Notification received in detail: ${notification.key} from ${notification.from}');
+          _handleIncomingMessage(notification);
+        }, onError: (e) {
+          _logger.severe('Notification error in detail: $e');
+        });
+
+        _logger.info('Detail screen notification listener setup complete');
       }
     } catch (e) {
       _logger.severe('Error setting up notification listener in chat detail: $e');
@@ -772,20 +803,32 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   void _handleIncomingMessage(AtNotification notification) {
-    if (notification.from == widget.conversation.otherAtSign) {
+    // Only process messages from the conversation partner
+    if (notification.from == widget.conversation.otherAtSign &&
+        (notification.key.contains('message.') || notification.key.contains('notify.message.'))) {
       try {
         final messageData = jsonDecode(notification.value ?? '{}');
 
-        setState(() {
-          widget.conversation.messages.add(ChatMessage(
-            text: messageData['text'] ?? '',
-            isMe: false,
-            timestamp: DateTime.now(),
-            senderAtSign: notification.from,
-          ));
-        });
+        // Check if message already exists to avoid duplicates
+        final messageText = messageData['text'] ?? '';
+        final isDuplicate = widget.conversation.messages.any((msg) =>
+        msg.text == messageText &&
+            msg.senderAtSign == notification.from &&
+            msg.timestamp.difference(DateTime.now()).abs().inSeconds < 5
+        );
 
-        _scrollToBottom();
+        if (!isDuplicate && messageText.isNotEmpty) {
+          setState(() {
+            widget.conversation.messages.add(ChatMessage(
+              text: messageText,
+              isMe: false,
+              timestamp: DateTime.parse(messageData['timestamp'] ?? DateTime.now().toIso8601String()),
+              senderAtSign: notification.from,
+            ));
+          });
+
+          _scrollToBottom();
+        }
       } catch (e) {
         _logger.severe('Error handling incoming message in chat detail: $e');
       }
@@ -837,6 +880,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ..sharedWith = widget.conversation.otherAtSign
         ..sharedBy = widget.currentAtSign;
 
+      // Set metadata
+      final metadata = Metadata()
+        ..isPublic = false
+        ..isEncrypted = true
+        ..namespaceAware = true;
+
+      messageKey.metadata = metadata;
+
       final messageData = {
         'text': messageText,
         'timestamp': message.timestamp.toIso8601String(),
@@ -844,13 +895,31 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         'senderAtSign': widget.currentAtSign,
       };
 
+      // First, store the message
       await atClient.put(messageKey, jsonEncode(messageData));
 
-      // Notify the recipient
-      await atClient.notify(
-        messageKey,
-        jsonEncode(messageData),
-        OperationEnum.update,
+      // Then send a notification for real-time update
+      final notificationKey = AtKey()
+        ..key = 'notify.message.$timestamp'
+        ..namespace = 'chatapp'
+        ..sharedWith = widget.conversation.otherAtSign
+        ..sharedBy = widget.currentAtSign;
+
+      // Set notification metadata with TTL
+      final notificationMetadata = Metadata()
+        ..isPublic = false
+        ..isEncrypted = true
+        ..namespaceAware = true
+        ..ttl = 60000; // 1 minute TTL for notification
+
+      notificationKey.metadata = notificationMetadata;
+
+      // Send notification with the message data
+      await atClient.notificationService.notify(
+        NotificationParams.forUpdate(
+          notificationKey,
+          value: jsonEncode(messageData),
+        ),
       );
 
       widget.onMessageSent(message);
@@ -858,7 +927,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       // Trigger sync
       atClient.syncService.sync();
 
-      _logger.info('Message sent successfully to ${widget.conversation.otherAtSign}');
+      _logger.info('Message sent and notified to ${widget.conversation.otherAtSign}');
     } catch (e) {
       _logger.severe('Error sending message: $e');
       _showError('Failed to send message');
