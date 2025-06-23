@@ -5,7 +5,7 @@ import 'customers_screen.dart'; // Update with your actual file path
 
 // * Once the onboarding process is completed you will be taken to this screen
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -33,7 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text(
           'Dashboard',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, inherit: false),
         ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
@@ -269,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
 // Add this to your main.dart or app routing
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -278,6 +278,9 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+        titleTextStyle: TextStyle(inherit: false), // disables AppBar Hero
+        ),
       ),
       home: const HomeScreen(),
       debugShowCheckedModeBanner: false,

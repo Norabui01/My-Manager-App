@@ -25,7 +25,7 @@ class Customer {
 }
 
 class CustomersListScreen extends StatefulWidget {
-  const CustomersListScreen({Key? key}) : super(key: key);
+  const CustomersListScreen({super.key});
 
   @override
   State<CustomersListScreen> createState() => _CustomersListScreenState();
@@ -147,7 +147,7 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
       appBar: AppBar(
         title: const Text(
           'Customers',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, inherit: false),
         ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
