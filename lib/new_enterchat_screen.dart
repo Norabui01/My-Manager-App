@@ -6,9 +6,9 @@ class NewChatScreen extends StatefulWidget {
   final Function(String) onChatStarted;
 
   const NewChatScreen({
-    Key? key,
+    super.key,
     required this.onChatStarted,
-  }) : super(key: key);
+  });
 
   @override
   State<NewChatScreen> createState() => _NewChatScreenState();
@@ -93,9 +93,9 @@ class _NewChatScreenState extends State<NewChatScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

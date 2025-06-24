@@ -18,10 +18,10 @@ class AtPlatformConfig {
       ..hiveStoragePath = '${dir.path}/storage/hive'
       ..commitLogPath = '${dir.path}/storage/commitLog'
       ..isLocalStoreRequired = true
-      ..syncStrategy = SyncStrategy.immediate
-      ..syncIntervalMins = 1
+      //..syncStrategy = SyncStrategy.immediate
+      ..syncIntervalMins = 0
       ..fetchOfflineNotifications = true
-      ..monitorHeartbeatInterval = Duration(seconds: 60);
+      ..monitorHeartbeatInterval = Duration(seconds: 30);
   }
 
   static AtOnboardingConfig getOnboardingConfig() {
@@ -89,7 +89,7 @@ class MessageSyncHelper {
       atClient.syncService.sync();
 
       // Get the monitor connection to check for any pending notifications
-      final notificationService = atClient.notificationService;
+      //final notificationService = atClient.notificationService;
 
       // The notification service will automatically fetch notifications
       // when the monitor connection is active

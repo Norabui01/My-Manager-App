@@ -5,7 +5,7 @@ import 'customers_screen.dart'; // Update with your actual file path
 
 // * Once the onboarding process is completed you will be taken to this screen
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -92,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     'Your current @sign: ${atClient.getCurrentAtSign()}',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.5),
                       fontSize: 16,
                     ),
                   ),
@@ -120,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildActionCard(
                   title: 'Customers',
-                  subtitle: 'Manage Customers',
+                  subtitle: 'Manage customers',
                   icon: Icons.people,
                   color: Colors.blue,
                   onTap: () {
@@ -136,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: 'Employees',
                   subtitle: 'Manage employees',
                   icon: Icons.business,
-                  color: Colors.green,
+                  color: Colors.purple,
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Orders screen coming soon!')),
@@ -156,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 _buildActionCard(
                   title: 'Supplies',
-                  subtitle: 'Manage inventory',
+                  subtitle: 'View all supplies',
                   icon: Icons.inventory,
                   color: Colors.green,
                   onTap: () {
@@ -189,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildActionCard(
                   title: 'My Window',
-                  subtitle: 'Manage temperatures',
+                  subtitle: 'View temperatures',
                   icon: Icons.window,
                   color: Colors.blue,
                   onTap: () {
@@ -269,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
 // Add this to your main.dart or app routing
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {

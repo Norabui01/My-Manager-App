@@ -5,7 +5,7 @@ import 'search_screen.dart';
 import 'chat_screen.dart';
 import 'home_screen.dart';
 class MainAppScreen extends StatefulWidget {
-  const MainAppScreen({Key? key}) : super(key: key);
+  const MainAppScreen({super.key});
 
   @override
   State<MainAppScreen> createState() => _MainAppScreenState();

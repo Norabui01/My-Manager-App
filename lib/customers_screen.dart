@@ -25,7 +25,7 @@ class Customer {
 }
 
 class CustomersListScreen extends StatefulWidget {
-  const CustomersListScreen({Key? key}) : super(key: key);
+  const CustomersListScreen({super.key});
 
   @override
   State<CustomersListScreen> createState() => _CustomersListScreenState();
