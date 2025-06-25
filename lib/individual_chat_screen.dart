@@ -4,6 +4,7 @@ import 'package:at_utils/at_logger.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'chat_screen.dart';
+import 'atplatform_configuration.dart';
 
 // Chat Detail Screen - Individual chat conversation
 class ChatDetailScreen extends StatefulWidget {
@@ -37,6 +38,46 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _scrollToBottom();
   }
 
+  Future<void> _reloadMessages() async {
+  try {
+    final keys = await MessageSyncHelper.getMessageKeys(
+      atClientManager!.atClient,
+      widget.conversation.otherAtSign,
+      widget.currentAtSign,
+    );
+
+    List<ChatMessage> loadedMessages = [];
+    Set<String> seenIds = {};
+
+    for (final key in keys) {
+      if (seenIds.contains(key.toString())) continue;
+      final atValue = await atClientManager!.atClient.get(key);
+      if (atValue.value != null) {
+        final data = jsonDecode(atValue.value!);
+        loadedMessages.add(ChatMessage(
+          id: key.toString(),
+          text: data['text'] ?? '',
+          isMe: key.sharedBy == widget.currentAtSign,
+          timestamp: DateTime.parse(data['timestamp'] ?? DateTime.now().toIso8601String()),
+          senderAtSign: key.sharedBy ?? '',
+        ));
+        seenIds.add(key.toString()); 
+      }
+    }
+
+    loadedMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    if (mounted) {
+      setState(() {
+        widget.conversation.messages = loadedMessages;
+      });
+      _scrollToBottom();
+    }
+  } catch (e) {
+    _logger.severe('Error reloading messages: $e');
+  }
+}
+
   Future<void> _setupNotificationListener() async {
     try {
       final notificationService = atClientManager?.notificationService;
@@ -58,9 +99,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   void _handleIncomingMessage(AtNotification notification) {
+    //skip system sync
+    if (notification.key.contains('statsNotification')) return;
     // Only process messages from the conversation partner
     if (notification.from == widget.conversation.otherAtSign &&
         (notification.key.contains('message.') || notification.key.contains('notify.message.'))) {
+           _reloadMessages();  // reload all messages when a new message notification arrives
       try {
         final messageData = jsonDecode(notification.value ?? '{}');
 
@@ -72,9 +116,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             msg.timestamp.difference(DateTime.now()).abs().inSeconds < 5
         );
 
+        final messageKeyId = notification.key;
+
         if (!isDuplicate && messageText.isNotEmpty) {
           setState(() {
             widget.conversation.messages.add(ChatMessage(
+              id: messageKeyId,
               text: messageText,
               isMe: false,
               timestamp: DateTime.parse(messageData['timestamp'] ?? DateTime.now().toIso8601String()),
@@ -115,7 +162,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         return;
       }
 
+      // Create unique message key id
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final messageKeyId = 'message.$timestamp';
+
       final message = ChatMessage(
+        id: messageKeyId,
         text: messageText,
         isMe: true,
         timestamp: DateTime.now(),
@@ -128,9 +180,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       _scrollToBottom();
 
       // Create unique message key with timestamp
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
       final messageKey = AtKey()
-        ..key = 'message.$timestamp'
+        ..key = messageKeyId
         ..namespace = 'chatapp'
         ..sharedWith = widget.conversation.otherAtSign
         ..sharedBy = widget.currentAtSign;
@@ -149,9 +200,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         'type': 'text',
         'senderAtSign': widget.currentAtSign,
       };
+      PutRequestOptions pro = PutRequestOptions()..useRemoteAtServer = true;
 
       // First, store the message
-      await atClient.put(messageKey, jsonEncode(messageData));
+      await atClient.put(messageKey, jsonEncode(messageData), putRequestOptions: pro);
 
       // Then send a notification for real-time update
       final notificationKey = AtKey()

@@ -94,13 +94,18 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _handleNotification(AtNotification notification) {
+    //skip system sync/stat pings
+    if (notification.key.contains('statsNotification')) return;
     _logger.info('Handling notification: ${notification.key} from ${notification.from}');
 
     // Handle both stored messages and notifications
     if (notification.key.contains('message.') || notification.key.contains('notify.message.')) {
       _processIncomingMessage(notification);
+      
     }
   }
+
+
 
   Future<void> _processIncomingMessage(AtNotification notification) async {
     try {
@@ -141,6 +146,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // Add message to conversation
       final newMessage = ChatMessage(
+        id: notification.key,
         text: messageData['text'] ?? '',
         isMe: false,
         timestamp: DateTime.parse(messageData['timestamp'] ?? DateTime.now().toIso8601String()),
@@ -223,9 +229,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // Process all messages
       final allKeys = {...sharedKeys, ...receivedKeys};
+      final existingIds = <String>{};
 
       for (String key in allKeys) {
+        
         try {
+          if (existingIds.contains(key)) continue;
           final atKey = AtKey.fromString(key);
 
           // Set proper metadata
@@ -242,11 +251,13 @@ class _ChatScreenState extends State<ChatScreen> {
             final messageData = jsonDecode(atValue.value!);
 
             conversation.messages.add(ChatMessage(
+              id: key,
               text: messageData['text'] ?? '',
               isMe: atKey.sharedBy == currentAtSign,
               timestamp: DateTime.parse(messageData['timestamp'] ?? DateTime.now().toIso8601String()),
               senderAtSign: atKey.sharedBy!,
             ));
+            existingIds.add(key); // prevent duplication
           }
         } catch (e) {
           _logger.warning('Error loading message $key: $e');
@@ -262,6 +273,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _saveConversation(ChatConversation conversation) async {
+    PutRequestOptions pro = PutRequestOptions()..useRemoteAtServer = true;
     try {
       final atClient = atClientManager?.atClient;
       if (atClient == null) return;
@@ -271,7 +283,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ..namespace = 'chatapp'
         ..sharedBy = currentAtSign;
 
-      await atClient.put(key, jsonEncode(conversation.toJson()));
+      await atClient.put(key, jsonEncode(conversation.toJson()), putRequestOptions: pro);
     } catch (e) {
       _logger.severe('Error saving conversation: $e');
     }
@@ -531,6 +543,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Reload messages when returning from chat detail
     if (result == true) {
+      await Future.delayed(Duration(seconds: 1)); // prevent race with sync
       await _loadMessagesForConversation(conversation);
       setState(() {});
     }
@@ -661,13 +674,16 @@ class ChatConversation {
   int unreadCount;
   List<ChatMessage> messages;
 
+  Set<String> seenIds;
+
   ChatConversation({
     required this.otherAtSign,
     required this.lastMessage,
     required this.lastMessageTime,
     required this.unreadCount,
     required this.messages,
-  });
+    Set<String>? seenIds,
+  }) : seenIds = seenIds ?? {}; 
 
   Map<String, dynamic> toJson() {
     return {
@@ -676,6 +692,7 @@ class ChatConversation {
       'lastMessageTime': lastMessageTime.toIso8601String(),
       'unreadCount': unreadCount,
       'messages': messages.map((m) => m.toJson()).toList(),
+      'seenIds': seenIds.toList(), // serialize seen IDs
     };
   }
 
@@ -688,17 +705,22 @@ class ChatConversation {
       messages: (json['messages'] as List<dynamic>?)
           ?.map((m) => ChatMessage.fromJson(m))
           .toList() ?? [],
+          seenIds: json['seenIds'] != null
+        ? Set<String>.from(json['seenIds'])
+        : <String>{},
     );
   }
 }
 
 class ChatMessage {
+  String id;
   String text;
   bool isMe;
   DateTime timestamp;
   String senderAtSign;
 
   ChatMessage({
+    required this.id,
     required this.text,
     required this.isMe,
     required this.timestamp,
@@ -707,6 +729,7 @@ class ChatMessage {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'text': text,
       'isMe': isMe,
       'timestamp': timestamp.toIso8601String(),
@@ -716,6 +739,7 @@ class ChatMessage {
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
+      id: json['id'] ?? '',
       text: json['text'] ?? '',
       isMe: json['isMe'] ?? false,
       timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
