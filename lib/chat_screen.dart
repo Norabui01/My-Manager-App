@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'onboarding_configuration.dart';
 
 import 'new_enterchat_screen.dart';
 import 'individual_chat_screen.dart';
@@ -10,8 +12,12 @@ import 'group_chat_screen.dart';
 import 'search_chat_screen.dart';
 import 'archived_chat_screen.dart';
 
+
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final VoidCallback onBackToHome;
+  const ChatScreen({
+    super.key,
+    required this.onBackToHome});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -31,6 +37,20 @@ class _ChatScreenState extends State<ChatScreen> {
     _initializeAtClient();
   }
 
+  Future<void> _navigateToOnboarding() async {
+    await OnboardingConfig.onboardUser(
+      context: context,
+      apiKey: dotenv.env['API_KEY'],
+      namespace: dotenv.env['NAMESPACE_CHAT'],
+      onSuccess: (atSign) async {
+        currentAtSign = atSign;
+        await _setupNotificationListener();
+        await _loadConversations();
+        setState(() {});
+      }
+    );
+  }
+
   Future<void> _initializeAtClient() async {
     try {
       atClientManager = AtClientManager.getInstance();
@@ -40,36 +60,11 @@ class _ChatScreenState extends State<ChatScreen> {
         await _setupNotificationListener();
         await _loadConversations();
       } else {
-        _navigateToOnboarding();
+        await _navigateToOnboarding();
       }
     } catch (e) {
       _logger.severe('Error initializing AtClient: $e');
       _showErrorDialog('Failed to initialize messaging service');
-    }
-  }
-
-  Future<void> _navigateToOnboarding() async {
-    final AtOnboardingConfig config = AtOnboardingConfig(
-      atClientPreference: AtClientPreference()
-        ..rootDomain = 'root.atsign.org'
-        ..namespace = 'chatapp'
-        ..hiveStoragePath = '/storage/hive'
-        ..commitLogPath = '/storage/commitLog'
-        ..isLocalStoreRequired = true,
-      appAPIKey: 'YOUR_API_KEY',
-      rootEnvironment: RootEnvironment.Production,
-    );
-
-    final result = await AtOnboarding.onboard(
-      context: context,
-      config: config,
-    );
-
-    if (result.status == AtOnboardingResultStatus.success) {
-      currentAtSign = result.atsign;
-      await _setupNotificationListener();
-      await _loadConversations();
-      setState(() {});
     }
   }
 
@@ -104,8 +99,6 @@ class _ChatScreenState extends State<ChatScreen> {
       
     }
   }
-
-
 
   Future<void> _processIncomingMessage(AtNotification notification) async {
     try {
@@ -250,14 +243,36 @@ class _ChatScreenState extends State<ChatScreen> {
           if (atValue.value != null) {
             final messageData = jsonDecode(atValue.value!);
 
-            conversation.messages.add(ChatMessage(
+            final text = messageData['text'] ?? '';
+            final timestampStr = messageData['timestamp'] ?? DateTime.now().toIso8601String();
+            final timestamp = DateTime.parse(timestampStr);
+            final sender = atKey.sharedBy!;
+
+            bool isDuplicate = conversation.messages.any((msg) =>
+              msg.text == text &&
+              msg.senderAtSign == sender &&
+              msg.timestamp == timestamp
+            );
+
+            if (!isDuplicate) {
+              conversation.messages.add(ChatMessage(
+                id: key,
+                text: text,
+                isMe: sender == currentAtSign,
+                timestamp: timestamp,
+                senderAtSign: sender,
+              ));
+              existingIds.add(key);
+            }
+
+            /*conversation.messages.add(ChatMessage(
               id: key,
               text: messageData['text'] ?? '',
               isMe: atKey.sharedBy == currentAtSign,
               timestamp: DateTime.parse(messageData['timestamp'] ?? DateTime.now().toIso8601String()),
               senderAtSign: atKey.sharedBy!,
             ));
-            existingIds.add(key); // prevent duplication
+            existingIds.add(key);*/ // prevent duplication
           }
         } catch (e) {
           _logger.warning('Error loading message $key: $e');
@@ -563,6 +578,11 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: BackButton(
+          onPressed: () {
+          widget.onBackToHome(); // switch tab to HomeScreen
+          },
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -750,8 +770,8 @@ class ChatMessage {
 
 // Chat Detail Screen - Individual chat conversation
 
-// Create Group Screen
+// Create Group Screen//unnessary
 
 // Archived Chats Screen//Unnessary 
 
-// Chat Search Screen
+// Chat Search Screen//unnessary

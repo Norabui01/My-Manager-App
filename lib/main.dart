@@ -6,7 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
 
-import 'main_screen.dart';
+import 'user_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,7 +19,7 @@ Future<AtClientPreference> loadAtClientPreference() async {
 
   return AtClientPreference()
     ..rootDomain = 'root.atsign.org'
-    ..namespace = dotenv.env['NAMESPACE']
+    ..namespace = dotenv.env['NAMESPACE_CHAT']
     ..hiveStoragePath = dir.path
     ..commitLogPath = dir.path
     ..isLocalStoreRequired = true;
@@ -65,7 +65,7 @@ class MyAppState extends State<MyApp> {
                     case AtOnboardingResultStatus.success:
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const MainAppScreen()),
+                        MaterialPageRoute(builder: (_) => const UsernameScreen()),
                       );
                       break;
                     case AtOnboardingResultStatus.error:

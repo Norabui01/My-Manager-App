@@ -1,12 +1,48 @@
 import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/material.dart';
 
-class AtPlatformConfig {
+
+class OnboardingConfig {
+  static Future<String?> onboardUser({
+    required BuildContext context,
+    required String? apiKey,
+    required String? namespace,
+    required Future<void> Function(String atSign) onSuccess,
+    Future<void> Function()? onFailure,
+    String rootDomain = 'root.atsign.org',
+    String hiveStoragePath = '/storage/hive',
+    String commitLogPath = '/storage/comitLog',
+  }) async {
+    final config = AtOnboardingConfig(
+      atClientPreference: AtClientPreference()
+        ..rootDomain = rootDomain
+        ..namespace = namespace
+        ..hiveStoragePath = hiveStoragePath
+        ..commitLogPath = commitLogPath
+        ..isLocalStoreRequired = true,
+      appAPIKey: apiKey,
+      rootEnvironment: RootEnvironment.Production,
+    );
+
+    final result = await AtOnboarding.onboard(
+      context: context,
+      config: config,
+    );
+
+    if (result.status == AtOnboardingResultStatus.success) {
+      final atSign = result.atsign!;
+      await onSuccess(atSign);
+      return atSign;
+    } else {
+      if (onFailure != null) await onFailure();
+      return null;
+    }
+  }
+}
+/*class AtPlatformConfig {
   static const String namespace = 'chatapp';
   static const String rootDomain = 'root.atsign.org';
 
-  // Replace with your actual API key from atsign.dev
   static String apiKey = dotenv.env['API_KEY'] ?? 'YOUR_API_KEY';
 
   static Future<AtClientPreference> getClientPreference() async {
@@ -79,7 +115,7 @@ class AtPlatformHelper {
     }
     return displayName.toUpperCase();
   }
-}
+}*/
 
 // Message sync helper
 class MessageSyncHelper {
@@ -145,7 +181,7 @@ class MessageSyncHelper {
     return messageKeys;
   }
 }
-
+/*
 // Error handling for atPlatform operations
 class AtPlatformException implements Exception {
   final String message;
@@ -214,4 +250,4 @@ class EnhancedChatMessage {
       error: json['error'],
     );
   }
-}
+}*/

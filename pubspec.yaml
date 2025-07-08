@@ -43,6 +43,7 @@ dependencies:
   uuid: ^3.0.7
   at_common_flutter: ^2.0.15
   at_utils: ^3.2.0
+  file_picker: ^9.2.3
 
 dev_dependencies:
   flutter_test:

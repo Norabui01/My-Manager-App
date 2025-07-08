@@ -1,11 +1,14 @@
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/material.dart';
-import 'customers_screen.dart'; // Update with your actual file path
-
+import 'customers_screen.dart';
 
 // * Once the onboarding process is completed you will be taken to this screen
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String userName;
+  const HomeScreen({
+    super.key,
+    required this.userName
+    });
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -80,8 +83,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Welcome back, Nora!',
+                  Text(
+                    'Welcome back, ${widget.userName}!',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 24,
@@ -127,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const CustomersListScreen(),
+                        builder: (context) => const CustomerScreen(),
                       ),
                     );
                   },
@@ -196,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const CustomersListScreen(),
+                        builder: (context) => const CustomerScreen(),
                       ),
                     );
                   },
@@ -265,22 +268,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-
-// Add this to your main.dart or app routing
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
-      home: const HomeScreen(),
-      debugShowCheckedModeBanner: false,
-    );}
-  
 }

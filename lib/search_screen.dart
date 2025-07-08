@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  final VoidCallback onBackToHome;
+  const SearchScreen({
+    super.key,
+    required this.onBackToHome});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -373,6 +376,11 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: BackButton(
+          onPressed: () {
+          widget.onBackToHome(); // switch tab to HomeScreen
+          },
+        ),
         title: Container(
           height: 40,
           decoration: BoxDecoration(

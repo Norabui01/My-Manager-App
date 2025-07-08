@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 // Archived Chats Screen//Unnessary 
 class ArchivedChatsScreen extends StatelessWidget {
   const ArchivedChatsScreen({super.key});

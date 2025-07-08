@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'chat_screen.dart';
 
 class PeopleScreen extends StatefulWidget {
-  const PeopleScreen({super.key});
+  final VoidCallback onBackToHome;
+  const PeopleScreen({
+    super.key, 
+    required this.onBackToHome
+  });
 
   @override
   State<PeopleScreen> createState() => _PeopleScreenState();
@@ -15,6 +19,11 @@ class _PeopleScreenState extends State<PeopleScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: BackButton(
+          onPressed: () {
+          widget.onBackToHome(); // switch tab to HomeScreen
+          },
+        ),
         title: const Text(
           'People',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -284,7 +293,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const ChatScreen()),
+                MaterialPageRoute(builder: (context) => ChatScreen(onBackToHome: widget.onBackToHome,)),
               );
             },
           ),
@@ -375,7 +384,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
                   Navigator.pop(context);
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ChatScreen()),
+                    MaterialPageRoute(builder: (context) => ChatScreen(onBackToHome: widget.onBackToHome)),
                   );
                 },
               ),

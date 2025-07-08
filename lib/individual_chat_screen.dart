@@ -4,7 +4,7 @@ import 'package:at_utils/at_logger.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'chat_screen.dart';
-import 'atplatform_configuration.dart';
+import 'onboarding_configuration.dart';
 
 // Chat Detail Screen - Individual chat conversation
 class ChatDetailScreen extends StatefulWidget {
