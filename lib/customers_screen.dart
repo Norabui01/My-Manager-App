@@ -1,12 +1,16 @@
-import 'package:at_utils/at_utils.dart';
-import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'package:at_utils/at_utils.dart';
 import 'onboarding_configuration.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
+import 'data_models.dart';
+
 //Screen UI
 class CustomerScreen extends StatefulWidget {
   const CustomerScreen({super.key});
@@ -16,8 +20,10 @@ class CustomerScreen extends StatefulWidget {
 }
 
 class _CustomerScreenState extends State<CustomerScreen> {
+  final Set<String> _handledNotificationKeys = {};
   AtNotification? notification;
-  int _unreadNotifications = 0;
+  StreamSubscription? _notificationSubscription;
+  //int _unreadNotifications = 0;
   final AtSignLogger _logger = AtSignLogger('CustomerScreen');
 
   List<Customer> customers = [];
@@ -38,7 +44,11 @@ class _CustomerScreenState extends State<CustomerScreen> {
     if (result != null && result.files.single.path != null) {
       final file = File(result.files.single.path!);
       final content = await file.readAsString();
+
+      final stopwatch = Stopwatch()..start();
       final parsed = parseCustomerJson(content);
+      stopwatch.stop();
+      print('Parsing took: ${stopwatch.elapsedMilliseconds} ms');
 
       setState(() {
         customers = parsed;
@@ -76,19 +86,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
     }
 
     final jsonData = encodeCustomerJson(
-      customers/*.map((c) {
-        return Customer(
-          id: c.id,
-          name: c.name,
-          phone: c.phone,
-          location: c.location,
-          bonusPoints: c.bonusPoints,
-          giftCard: c.giftCard,
-          services: c.services,
-          senderAtSign: currentAtSign,
-          receiverAtSign: receiverAtSign,
-        );
-      }).toList(),*/
+      customers
     );
 
     final key = AtKey()
@@ -105,12 +103,12 @@ class _CustomerScreenState extends State<CustomerScreen> {
     await atClient.put(key, jsonData);
 
     //Send notification
-    await atClient.notificationService.notify(
+    /*await atClient.notificationService.notify(
       NotificationParams.forUpdate(
         key,
         value: jsonData,
       )
-    );
+    );*/
 
     _showSnackBar('Customer data sent to $receiverAtSign');
 
@@ -168,35 +166,49 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
   //set up notification when receive customer
   //set up notification listener (only stores the notification, doesn't auto-load)
-  bool _isListenerSet = false; // Add this as a class variable
+  //bool _isListenerSet = false; // Add this as a class variable
 
   void _setupNotificationListener() {
-    if (_isListenerSet) return;
-    _isListenerSet = true;
+    //if (_notificationSubscription != null) return;
+    //if (_isListenerSet) return;
+    //_isListenerSet = true;
 
     final atClient = AtClientManager.getInstance().atClient;
     final currentAtSign = atClient.getCurrentAtSign();
 
-    atClient.notificationService.subscribe().listen((incomingNotification) {
+    _notificationSubscription = atClient.notificationService.subscribe().listen((incomingNotification) {
       final fromAtSign = incomingNotification.from;
       final key = incomingNotification.key.toLowerCase();
 
       _logger.info('Notification received from: $fromAtSign');
       _logger.info('Notification key: $key');
 
+      //set of string to remember the subcribed keys
+      if (_handledNotificationKeys.contains(key)) {
+        _logger.info('Duplicate notification ignored: $key');
+        return;//if duplicate key, skip
+      }
+      _handledNotificationKeys.add(key);
+
       // Skip self-notifications and unrelated keys
-      if ((key.contains('customer_data') || key.contains('statsnotification')) &&
+      if ((key.contains('customer_data')) &&
           fromAtSign != currentAtSign) {
-        if (mounted) {
+        if (!mounted) return;
           setState(() {
             notification = incomingNotification;
           });
           _showSnackBar('New data received from $fromAtSign. Click download to load it.');
-        }
+        //}
       } else {
         _logger.info('Ignored notification: either from self or irrelevant.');
       }
-  });
+    });
+}
+
+@override
+void dispose() {
+  _notificationSubscription?.cancel();
+  super.dispose();
 }
 
 
@@ -302,134 +314,6 @@ class _CustomerScreenState extends State<CustomerScreen> {
           ),
     );
   }
-}
-
-//Data model
-class Customer {
-  final String id;
-  final String name;
-  final String phone;
-  final String? location;
-  int? bonusPoints;
-  GiftCard? giftCard;
-  List<Service> services;
-
-  String senderAtSign; //who sent data
-  String receiverAtSign; //who is intended to receive
-
-  Customer({
-    required this.id,
-    required this.name,
-    required this.phone,
-    this.location,
-    this.bonusPoints,
-    this.giftCard,
-    required this.services,
-    required this.senderAtSign,
-    required this.receiverAtSign,
-  });
-
-  factory Customer.fromJson(Map<String, dynamic> json) => Customer(
-    id: json['id'],
-    name: json['name'],
-    phone: json['phone'],
-    location: json['location'],
-    bonusPoints: json['bonusPoints'],
-    giftCard: GiftCard.fromJson(json['giftCard']),
-    services: (json['services'] as List)
-              .map((s) => Service.fromJson(s))
-              .toList(),
-
-    senderAtSign: json['senderAtSign'] ?? '',
-    receiverAtSign: json['receiverAtSign'] ?? '',
-  );
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'phone': phone,
-    'location': location,
-    'bonusPoints': bonusPoints,
-    'giftCard': giftCard?.toJson(),
-    'services': services.map((s) => s.toJson()).toList(),
-
-    'senderAtSign': senderAtSign,
-    'receiverAtSign': receiverAtSign,
-  };
-}
-
-class GiftCard {
-  String number;
-  double balance;
-
-  GiftCard({
-    required this.number,
-    required this.balance,
-  });
-
-  factory GiftCard.fromJson(Map<String, dynamic> json) => GiftCard(
-    number: json['number'],
-    balance: (json['balance'] as num).toDouble(),
-  );
-
-  Map<String, dynamic> toJson() => {
-    'number': number,
-    'balance': balance,
-  };
-}
-
-class Service {
-  String date;
-  String serviceType;
-  double price;
-  List<WorkerTip> workers;
-
-  Service({
-    required this.date,
-    required this.serviceType,
-    required this.price,
-    required this.workers,
-  });
-
-  factory Service.fromJson(Map<String, dynamic> json) => Service(
-    date: json['date'],
-    serviceType: json['serviceType'],
-    price: (json['price'] as num).toDouble(),
-    workers: (json['workers'] as List)
-              .map((w) => WorkerTip.fromJson(w))
-              .toList(),
-  );
-
-  Map<String, dynamic> toJson() => {
-    'date': date,
-    'serviceType': serviceType,
-    'price': price,
-    'workers': workers.map((w) => w.toJson()).toList(),
-  };
-}
-
-class WorkerTip {
-  String name;
-  String role;
-  double tip;
-
-  WorkerTip({
-    required this.name,
-    required this.role,
-    required this.tip,
-  });
-
-  factory WorkerTip.fromJson(Map<String, dynamic> json) => WorkerTip(
-    name: json['name'],
-    role: json['role'],
-    tip: (json['tip'] as num).toDouble(),
-  );
-
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'role': role,
-    'tip': tip,
-  };
 }
 
 //Parse File

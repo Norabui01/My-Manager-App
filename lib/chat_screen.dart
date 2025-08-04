@@ -11,6 +11,7 @@ import 'individual_chat_screen.dart';
 import 'group_chat_screen.dart';
 import 'search_chat_screen.dart';
 import 'archived_chat_screen.dart';
+import 'data_models.dart';
 
 
 class ChatScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  final Set<String> _handledNotificationKeys = {};
   final TextEditingController _messageController = TextEditingController();
   AtClientManager? atClientManager;
   String? currentAtSign;
@@ -44,7 +46,7 @@ class _ChatScreenState extends State<ChatScreen> {
       namespace: dotenv.env['NAMESPACE_CHAT'],
       onSuccess: (atSign) async {
         currentAtSign = atSign;
-        await _setupNotificationListener();
+        //await _setupNotificationListener();
         await _loadConversations();
         setState(() {});
       }
@@ -69,16 +71,29 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _setupNotificationListener() async {
+    //if (isNotificationListenerSet) return;
+    //isNotificationListenerSet = true;
     try {
       final notificationService = atClientManager?.atClient.notificationService;
+
       if (notificationService != null) {
-        _notificationSubscription = notificationService
-            .subscribe(regex: '.*', shouldDecrypt: true)
-            .listen((notification) {
-          _logger.info('Notification received: ${notification.key}');
-          _handleNotification(notification);
+        _notificationSubscription = notificationService.subscribe(regex: '.*', shouldDecrypt: true).listen((incomingNotification) {
+            final key = incomingNotification.key.toLowerCase();
+
+            final from = incomingNotification.from;
+            final value = incomingNotification.value ?? '';
+            final uniqueKey = '$key|$from|$value';
+
+            //set of string to remember the subcribed keys
+            if (_handledNotificationKeys.contains(uniqueKey)) {
+              _logger.info('Duplicate notification ignored: $uniqueKey');
+              return;//if duplicate key, skip
+            }
+            _handledNotificationKeys.add(uniqueKey);
+            _logger.info('Notification received: $uniqueKey');
+            _handleNotification(incomingNotification);
         }, onError: (e) {
-          _logger.severe('Notification error: $e');
+            _logger.severe('Notification error: $e');
         });
 
         _logger.info('Notification listener setup complete');
@@ -295,7 +310,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final key = AtKey()
         ..key = 'conversation.${conversation.otherAtSign.replaceAll('@', '')}'
-        ..namespace = 'chatapp'
+        ..namespace = dotenv.env['NAMESPACE_CHAT']
         ..sharedBy = currentAtSign;
 
       await atClient.put(key, jsonEncode(conversation.toJson()), putRequestOptions: pro);
@@ -303,6 +318,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _logger.severe('Error saving conversation: $e');
     }
   }
+
 
   void _showChatOptions() {
     showModalBottomSheet(
@@ -685,93 +701,3 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 }
-
-// Data Models
-class ChatConversation {
-  String otherAtSign;
-  String lastMessage;
-  DateTime lastMessageTime;
-  int unreadCount;
-  List<ChatMessage> messages;
-
-  Set<String> seenIds;
-
-  ChatConversation({
-    required this.otherAtSign,
-    required this.lastMessage,
-    required this.lastMessageTime,
-    required this.unreadCount,
-    required this.messages,
-    Set<String>? seenIds,
-  }) : seenIds = seenIds ?? {}; 
-
-  Map<String, dynamic> toJson() {
-    return {
-      'otherAtSign': otherAtSign,
-      'lastMessage': lastMessage,
-      'lastMessageTime': lastMessageTime.toIso8601String(),
-      'unreadCount': unreadCount,
-      'messages': messages.map((m) => m.toJson()).toList(),
-      'seenIds': seenIds.toList(), // serialize seen IDs
-    };
-  }
-
-  factory ChatConversation.fromJson(Map<String, dynamic> json) {
-    return ChatConversation(
-      otherAtSign: json['otherAtSign'] ?? '',
-      lastMessage: json['lastMessage'] ?? '',
-      lastMessageTime: DateTime.parse(json['lastMessageTime'] ?? DateTime.now().toIso8601String()),
-      unreadCount: json['unreadCount'] ?? 0,
-      messages: (json['messages'] as List<dynamic>?)
-          ?.map((m) => ChatMessage.fromJson(m))
-          .toList() ?? [],
-          seenIds: json['seenIds'] != null
-        ? Set<String>.from(json['seenIds'])
-        : <String>{},
-    );
-  }
-}
-
-class ChatMessage {
-  String id;
-  String text;
-  bool isMe;
-  DateTime timestamp;
-  String senderAtSign;
-
-  ChatMessage({
-    required this.id,
-    required this.text,
-    required this.isMe,
-    required this.timestamp,
-    required this.senderAtSign,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'text': text,
-      'isMe': isMe,
-      'timestamp': timestamp.toIso8601String(),
-      'senderAtSign': senderAtSign,
-    };
-  }
-
-  factory ChatMessage.fromJson(Map<String, dynamic> json) {
-    return ChatMessage(
-      id: json['id'] ?? '',
-      text: json['text'] ?? '',
-      isMe: json['isMe'] ?? false,
-      timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
-      senderAtSign: json['senderAtSign'] ?? '',
-    );
-  }
-}
-
-// Chat Detail Screen - Individual chat conversation
-
-// Create Group Screen//unnessary
-
-// Archived Chats Screen//Unnessary 
-
-// Chat Search Screen//unnessary

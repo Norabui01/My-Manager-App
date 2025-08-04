@@ -65,7 +65,7 @@ class _MainAppScreenState extends State<MainAppScreen> {
         BottomNavigationBarItem(
           icon: Icon(Icons.dashboard_outlined),
           activeIcon: Icon(Icons.dashboard),
-          label: 'Dashboard',
+          label: 'Home',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.people_outline),

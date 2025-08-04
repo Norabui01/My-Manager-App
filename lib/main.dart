@@ -44,7 +44,7 @@ class MyAppState extends State<MyApp> {
       // * The onboarding screen (first screen)
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('MyApp'),
+          title: const Text('My Manager App'),
         ),
         body: Builder(
           builder: (context) => Center(

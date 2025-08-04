@@ -35,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          'Dashboard',
+          'Home',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -171,52 +171,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 24),
-
-
-            // Quick Actions
-            const Text(
-              'My Home',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.5,
-              children: [
-                _buildActionCard(
-                  title: 'My Window',
-                  subtitle: 'View temperatures',
-                  icon: Icons.window,
-                  color: Colors.blue,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CustomerScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _buildActionCard(
-                  title: 'Orders',
-                  subtitle: 'View all orders',
-                  icon: Icons.shopping_bag,
-                  color: Colors.green,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Orders screen coming soon!')),
-                    );
-                  },
-                ),
-              ],
-            ),
             const SizedBox(height: 24),
           ],
         ),

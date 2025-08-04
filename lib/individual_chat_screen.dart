@@ -3,9 +3,11 @@ import 'package:at_onboarding_flutter/at_onboarding_flutter.dart';
 import 'package:at_utils/at_logger.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'chat_screen.dart';
 import 'onboarding_configuration.dart';
+import 'data_models.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+//import 'global_listener.dart';
 // Chat Detail Screen - Individual chat conversation
 class ChatDetailScreen extends StatefulWidget {
   final ChatConversation conversation;
@@ -27,7 +29,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   AtClientManager? atClientManager;
+
   final AtSignLogger _logger = AtSignLogger('ChatDetailScreen');
+  final Set<String> _handledNotificationKeys = {};
   StreamSubscription<AtNotification>? _notificationSubscription;
 
   @override
@@ -79,14 +83,29 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 }
 
   Future<void> _setupNotificationListener() async {
+    //if (isNotificationListenerSet) return;
+    //isNotificationListenerSet = true;
     try {
-      final notificationService = atClientManager?.notificationService;
+      final notificationService = atClientManager?.atClient.notificationService;
+
       if (notificationService != null) {
-        _notificationSubscription = notificationService
-            .subscribe(regex: '.*', shouldDecrypt: true)
-            .listen((notification) {
-          _logger.info('Notification received in detail: ${notification.key} from ${notification.from}');
-          _handleIncomingMessage(notification);
+        _notificationSubscription = notificationService.subscribe(regex: '.*', shouldDecrypt: true).listen((incomingNotification) {
+
+        final key = incomingNotification.key.toLowerCase();
+
+        
+        final from = incomingNotification.from;
+        final value = incomingNotification.value ?? '';
+        final uniqueKey = '$key|$from|$value';
+
+        //set of string to remember the subcribed keys
+        if (_handledNotificationKeys.contains(uniqueKey)) {
+          _logger.info('Duplicate notification ignored: $uniqueKey');
+          return;//if duplicate key, skip
+        }
+        _handledNotificationKeys.add(uniqueKey);
+          _logger.info('Notification received in detail: $uniqueKey from ${incomingNotification.from}');
+          _handleIncomingMessage(incomingNotification);
         }, onError: (e) {
           _logger.severe('Notification error in detail: $e');
         });
@@ -182,7 +201,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       // Create unique message key with timestamp
       final messageKey = AtKey()
         ..key = messageKeyId
-        ..namespace = 'chatapp'
+        ..namespace = dotenv.env['NAMESPACE_CHAT']
         ..sharedWith = widget.conversation.otherAtSign
         ..sharedBy = widget.currentAtSign;
 
@@ -205,10 +224,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       // First, store the message
       await atClient.put(messageKey, jsonEncode(messageData), putRequestOptions: pro);
 
-      // Then send a notification for real-time update
+      // 
+      //Then send a notification for real-time update
+      /*
       final notificationKey = AtKey()
         ..key = 'notify.message.$timestamp'
-        ..namespace = 'chatapp'
+        ..namespace = dotenv.env['NAMESPACE_CHAT']
         ..sharedWith = widget.conversation.otherAtSign
         ..sharedBy = widget.currentAtSign;
 
@@ -217,7 +238,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ..isPublic = false
         ..isEncrypted = true
         ..namespaceAware = true
-        ..ttl = 60000; // 1 minute TTL for notification
+        ..ttl = 600000; // 1 minute TTL for notification
 
       notificationKey.metadata = notificationMetadata;
 
@@ -227,7 +248,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           notificationKey,
           value: jsonEncode(messageData),
         ),
-      );
+      );*/
 
       widget.onMessageSent(message);
 
