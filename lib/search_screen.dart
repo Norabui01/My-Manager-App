@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart';
-import 'people_screen.dart';
-import 'chat_screen.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({Key? key}) : super(key: key);
+  final VoidCallback onBackToHome;
+  const SearchScreen({
+    super.key,
+    required this.onBackToHome});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
 class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMixin {
-  int _selectedIndex = 3;
   final TextEditingController _searchController = TextEditingController();
   late TabController _tabController;
   String _searchQuery = '';
@@ -117,32 +116,6 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
       _searchQuery = _searchController.text;
       _isSearching = _searchQuery.isNotEmpty;
     });
-  }
-
-  void _onItemTapped(int index) {
-    if (index == _selectedIndex) return;
-    
-    Widget screen;
-    switch (index) {
-      case 0:
-        screen = const HomeScreen();
-        break;
-      case 1:
-        screen = const PeopleScreen();
-        break;
-      case 2:
-        screen = const ChatScreen();
-        break;
-      case 3:
-        return; // Already on search screen
-      default:
-        return;
-    }
-    
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => screen),
-    );
   }
 
   List<Map<String, dynamic>> _getFilteredPeople() {
@@ -347,7 +320,7 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
           onTap: () {
             _searchController.text = search;
           },
-        )).toList(),
+        )),
       ],
     );
   }
@@ -403,6 +376,11 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: BackButton(
+          onPressed: () {
+          widget.onBackToHome(); // switch tab to HomeScreen
+          },
+        ),
         title: Container(
           height: 40,
           decoration: BoxDecoration(

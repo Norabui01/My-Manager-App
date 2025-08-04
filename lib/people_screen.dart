@@ -1,49 +1,29 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart';
 import 'chat_screen.dart';
-import 'search_screen.dart';
 
 class PeopleScreen extends StatefulWidget {
-  const PeopleScreen({Key? key}) : super(key: key);
+  final VoidCallback onBackToHome;
+  const PeopleScreen({
+    super.key, 
+    required this.onBackToHome
+  });
 
   @override
   State<PeopleScreen> createState() => _PeopleScreenState();
 }
 
 class _PeopleScreenState extends State<PeopleScreen> {
-  int _selectedIndex = 1;
-
-  void _onItemTapped(int index) {
-    if (index == _selectedIndex) return;
-    
-    Widget screen;
-    switch (index) {
-      case 0:
-        screen = const HomeScreen();
-        break;
-      case 1:
-        return; // Already on people screen
-      case 2:
-        screen = const ChatScreen();
-        break;
-      case 3:
-        screen = const SearchScreen();
-        break;
-      default:
-        return;
-    }
-    
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => screen),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: BackButton(
+          onPressed: () {
+          widget.onBackToHome(); // switch tab to HomeScreen
+          },
+        ),
         title: const Text(
           'People',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -208,6 +188,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: "dialog_fab", //add hero tag to prevent hero conflicts
         onPressed: _showAddPersonDialog,
         backgroundColor: Colors.blue[600],
         child: const Icon(Icons.person_add, color: Colors.white),
@@ -272,7 +253,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
       leading: Stack(
         children: [
           CircleAvatar(
-            backgroundColor: color.withOpacity(0.1),
+            backgroundColor: color.withValues(alpha: 0.1),
             child: Text(
               avatar,
               style: TextStyle(
@@ -312,7 +293,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const ChatScreen()),
+                MaterialPageRoute(builder: (context) => ChatScreen(onBackToHome: widget.onBackToHome,)),
               );
             },
           ),
@@ -403,7 +384,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
                   Navigator.pop(context);
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ChatScreen()),
+                    MaterialPageRoute(builder: (context) => ChatScreen(onBackToHome: widget.onBackToHome)),
                   );
                 },
               ),

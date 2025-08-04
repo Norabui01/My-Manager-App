@@ -1,0 +1,59 @@
+{
+  "customers": [
+    {
+      "id": "0001",
+      "name": "Alice Bui",
+      "phone": "337-123-4567",
+      "location": "Lake Charles",
+      "bonusPoints": 120,
+      "giftCard": {
+        "number": "GC0001",
+        "balance": 50.0
+      },
+      "services": [
+        {
+          "date": "2025-06-30",
+          "serviceType": "Combo Package",
+          "price": 170.0,
+          "workers": [
+            {
+              "name": "Nancy",
+              "role": "Full set",
+              "tip": 5.0
+            },
+            {
+              "name": "Lily",
+              "role": "Pedicure",
+              "tip": 8.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0002",
+      "name": "Nora Bui",
+      "phone": "337-123-4567",
+      "location": "Lake Charles",
+      "bonusPoints": 30,
+      "giftCard": {
+        "number": "GC0002",
+        "balance": 0.0
+      },
+      "services": [
+        {
+          "date": "2025-06-30",
+          "serviceType": "Full set",
+          "price": 80.0,
+          "workers": [
+            {
+              "name": "Trinh",
+              "role": "Full set",
+              "tip": 5.0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

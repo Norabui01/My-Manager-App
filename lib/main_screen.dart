@@ -1,12 +1,14 @@
-import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/material.dart';
-import 'customers_screen.dart'; // Update with your actual file path
 import 'people_screen.dart';
 import 'search_screen.dart';
 import 'chat_screen.dart';
 import 'home_screen.dart';
 class MainAppScreen extends StatefulWidget {
-  const MainAppScreen({Key? key}) : super(key: key);
+  final String userName;
+  const MainAppScreen({
+    super.key,
+    required this.userName
+  });
 
   @override
   State<MainAppScreen> createState() => _MainAppScreenState();
@@ -22,16 +24,22 @@ class _MainAppScreenState extends State<MainAppScreen> {
   void initState() {
     super.initState();
     _screens = [
-      const HomeScreen(),
-      const PeopleScreen(),
-      const SearchScreen(),
-      const ChatScreen(),
+      HomeScreen(userName: widget.userName,),
+      PeopleScreen(onBackToHome: _goToHome),
+      SearchScreen(onBackToHome: _goToHome),
+      ChatScreen(onBackToHome: _goToHome),
     ];
   }
 
   void _onItemTapped(int index) {
     setState(() {
       _currentIndex = index;
+    });
+  }
+
+  void _goToHome() {
+    setState(() {
+      _currentIndex = 0; //home_screen
     });
   }
 
@@ -57,12 +65,13 @@ class _MainAppScreenState extends State<MainAppScreen> {
         BottomNavigationBarItem(
           icon: Icon(Icons.dashboard_outlined),
           activeIcon: Icon(Icons.dashboard),
-          label: 'Dashboard',
+          label: 'Home',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.people_outline),
           activeIcon: Icon(Icons.people),
           label: 'People',
+          
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.search_outlined),

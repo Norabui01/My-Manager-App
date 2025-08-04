@@ -1,11 +1,14 @@
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'package:flutter/material.dart';
-import 'customers_screen.dart'; // Update with your actual file path
-
+import 'customers_screen.dart';
 
 // * Once the onboarding process is completed you will be taken to this screen
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String userName;
+  const HomeScreen({
+    super.key,
+    required this.userName
+    });
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -32,8 +35,8 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          'Dashboard',
-          style: TextStyle(fontWeight: FontWeight.bold, inherit: false),
+          'Home',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
@@ -80,8 +83,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Welcome back, Nora!',
+                  Text(
+                    'Welcome back, ${widget.userName}!',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 24,
@@ -92,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     'Your current @sign: ${atClient.getCurrentAtSign()}',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.5),
                       fontSize: 16,
                     ),
                   ),
@@ -120,14 +123,14 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildActionCard(
                   title: 'Customers',
-                  subtitle: 'Manage Customers',
+                  subtitle: 'Manage customers',
                   icon: Icons.people,
                   color: Colors.blue,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const CustomersListScreen(),
+                        builder: (context) => const CustomerScreen(),
                       ),
                     );
                   },
@@ -136,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: 'Employees',
                   subtitle: 'Manage employees',
                   icon: Icons.business,
-                  color: Colors.green,
+                  color: Colors.purple,
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Orders screen coming soon!')),
@@ -156,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 _buildActionCard(
                   title: 'Supplies',
-                  subtitle: 'Manage inventory',
+                  subtitle: 'View all supplies',
                   icon: Icons.inventory,
                   color: Colors.green,
                   onTap: () {
@@ -168,52 +171,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 24),
-
-
-            // Quick Actions
-            const Text(
-              'My Home',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.5,
-              children: [
-                _buildActionCard(
-                  title: 'My Window',
-                  subtitle: 'Manage temperatures',
-                  icon: Icons.window,
-                  color: Colors.blue,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CustomersListScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _buildActionCard(
-                  title: 'Orders',
-                  subtitle: 'View all orders',
-                  icon: Icons.shopping_bag,
-                  color: Colors.green,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Orders screen coming soon!')),
-                    );
-                  },
-                ),
-              ],
-            ),
             const SizedBox(height: 24),
           ],
         ),
@@ -265,25 +222,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-
-// Add this to your main.dart or app routing
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-        titleTextStyle: TextStyle(inherit: false), // disables AppBar Hero
-        ),
-      ),
-      home: const HomeScreen(),
-      debugShowCheckedModeBanner: false,
-    );}
-  
 }
