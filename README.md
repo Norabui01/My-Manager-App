@@ -2,6 +2,9 @@
 
 A new Flutter project.
 
+## License
+This project is licensed under the [MIT License](./LICENSE).
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
