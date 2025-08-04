@@ -11,10 +11,11 @@ import 'onboarding_configuration.dart';
 import 'package:at_client_mobile/at_client_mobile.dart';
 import 'data_models.dart';
 
+
 //Screen UI
 class CustomerScreen extends StatefulWidget {
   const CustomerScreen({super.key});
-
+  
   @override
   State<CustomerScreen> createState() => _CustomerScreenState();
 }
